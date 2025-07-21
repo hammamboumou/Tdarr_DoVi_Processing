@@ -1,9 +1,9 @@
 services:
-#    _____   ___      _     ___   ___ 
+#    _____   ___      _     ___   ___
 #   |_   _| |   \    /_\   | _ \ | _ \
 #     | |   | |) |  / _ \  |   / |   /
 #     |_|   |___/  /_/ \_\ |_|_\ |_|_\
-  
+
   tdarr_DoVi:
     container_name: tdarr_DoVi
     privileged: true
@@ -23,7 +23,7 @@ services:
       - internalNode=true
       - inContainer=true
       - nodeName=Yeezy
-      - ffmpegVersion=6
+      - ffmpegVersion=7
     volumes:
       - "/path/to/server:/app/server:rw"
       - "/path/to/configs:/app/configs:rw"
@@ -47,7 +47,7 @@ services:
       - UMASK_SET=002
       - inContainer=true
       - nodeName=DoVi_Yeezy #you can change the name, but i would leave it the same as plugins would need to be adjusted
-      - ffmpegVersion=6
+      - ffmpegVersion=7
 
     volumes:
       - "/path/to/server:/app/server:rw"
