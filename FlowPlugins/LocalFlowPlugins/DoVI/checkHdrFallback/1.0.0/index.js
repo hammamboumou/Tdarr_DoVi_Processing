@@ -104,9 +104,14 @@ var plugin = function (args) {
               matchCll = rawStr.match(/cll.?=[^\d]*([\d]+)/) || []; // tries to grab a number after cll=
               matchFall = rawStr.match(/maxfall.?=([\d]+)/) || [];
               matchMasterLuminance = rawStr.match(/masteringdisplay_luminance.?=([\d]+)/) || [];
+              // MediaInfo JSON form, e.g. "maxcll":"1000 cd/m2" or "maxfall":"400 cd/m2"
+              var matchMediaInfoCll = rawStr.match(/"max(?:cll|fall)":"(\d+)/) || [];
 
               // If we find a numeric > 0 => good
-              if (matchCll.length > 1 && parseInt(matchCll[1]) > 0) {
+              if (matchMediaInfoCll.length > 1 && parseInt(matchMediaInfoCll[1]) > 0) {
+                anyCll = true;
+              }
+              else if (matchCll.length > 1 && parseInt(matchCll[1]) > 0) {
                 anyCll = true;
               }
               else if (matchFall.length > 1 && parseInt(matchFall[1]) > 0) {

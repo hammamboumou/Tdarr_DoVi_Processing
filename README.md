@@ -46,9 +46,9 @@ This README explains how the **Extract → Inject → Package** (or skip steps i
 6. **Inject**  
    - Re-inject the RPU or newly created DV metadata.  
 7. **Package**  
-   - Use MP4Box or similar, add the DV container flags (`:dvp=8.1:dv-cm=hdr10`).  
+   - Use MP4Box to add the DV container flags (`:dvp=8.1`, or `:dvp=5` for Profile 5). The frame rate is taken from the original file.  
 8. **Remux**  
-   - Final step merges original audio streams / subtitles back into an MP4 container.
+   - Final step merges the original audio streams back into an MP4 container. Subtitles are kept as sidecar files.
 
 ---
 
@@ -73,24 +73,26 @@ Below is a quick summary of each plugin used in the flow. Many are adapted from 
    - Helps certain DoVi injection steps that rely on a fixed stream order.
 
 5. **ffmpeg - Extract Streams DoVi**  
-   - Extracts raw HEVC and .srt subtitles. Other tracks are dropped.  
+   - Extracts the first video stream as raw HEVC. Audio and other tracks are dropped (audio is taken from the original file when remuxing).  
+   - Text subtitles (SRT, ASS, mov_text, WebVTT) are written next to the original file as `<original name>.<lang>[.forced][.sdh].srt`; PGS subtitles as `.sup` (can be disabled). A second track with the same name is skipped.  
    - You can specify which subtitle languages to keep (default: English).
 
 6. **Extract DoVi RPU / Inject DoVi RPU / Package DoVi MP4**  
-   - For **Profiles 4/5/8**: No forced `-m 2` usage. Metadata is kept intact.  
-   - For **Profile 7**: 
-     - **Extract DoVi 7 RPU** (dual-layer)  
-     - **Inject DoVi RPU 7** (can remain dual-layer or convert to single-layer with `--discard`).  
-     - **Package DoVi 7 mp4** uses MP4Box with `:dvp=8.1:dv-cm=hdr10`.
+   - For **Profiles 4/5/8**: No forced `-m 2` usage. Metadata is kept intact. Profile 5 is packaged as `dvp=5`, the others as `dvp=8.1`.  
+   - For **Profile 7** (output is always single-layer Profile 8.1, the EL is discarded):
+     - **Extract DoVi 7 RPU** extracts the RPU converted to Profile 8.1 (`-m 2`). For dual-track sources it is read from the EL track of the original file.  
+     - **Inject DoVi RPU 7** converts the stream in place (`convert --discard`) if it is unchanged since extraction, or injects the extracted RPU if the HEVC was re-encoded in between.  
+     - **Package DoVi 7 mp4** uses MP4Box with `:dvp=8.1`.  
+     - The `(Dual > Single-Layer)` variants behave the same and are kept so existing flows keep working.
 
 7. **Processing HDR10+**  
    - **Extract HDR10+ Metadata** → .json using `hdr10plus_tool`.  
-   - **Inject HDR10+ as DoVi P8** → Convert it to DV.  
+   - **Inject HDR10+ as DoVi P8** → Convert it to DV. The RPU's L6 metadata (mastering luminance, MaxCLL, MaxFALL) is taken from the original file.  
    - **Package** the new DV (Profile 8) track in MP4.
 
 8. **Remux DoVi MP4**  
-   - If input is MP4, merges existing audio/subtitle streams with the new DV video. If MKV, re-mux to MP4.  
-   - Unwanted or unsupported audio (e.g., TrueHD) can be removed or re-encoded.
+   - If input is MP4, merges the original file's audio streams with the new DV video. If MKV, re-mux to MP4.  
+   - TrueHD and DTS audio is converted to E-AC3 (640k, max 5.1) by default, or removed if set to `remove`. The flow fails rather than produce a file without audio.
 
 ---
 
@@ -100,7 +102,7 @@ Below is a quick summary of each plugin used in the flow. Many are adapted from 
 [Input File] → [Extract raw HEVC stream] → [Extract Dolby Vision RPU] → [Optional re-encode HEVC / keep fallback if needed] → [Inject DV RPU] → [Package into MP4 with DV Profile 8.1] → [Remux with original audio/subtitles]
 
 
-- *Note*: If you do re-encode, be careful to preserve HDR10 fallback metadata. ffmpeg may strip it unless you add `-color_primaries bt2020 -color_trc smpte2084 ... -metadata "cll=..."`.
+- *Note*: If you do re-encode, add it between the Extract and Inject steps, and keep the colour tags (`-color_primaries bt2020 -color_trc smpte2084 -colorspace bt2020nc`). `-metadata "cll=..."` has no effect on a raw `.hevc` stream; check with MediaInfo that the encoder kept the mastering display / MaxCLL metadata.
 
 ---
 

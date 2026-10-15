@@ -60,6 +60,7 @@ var details = function () { return ({
     ],
 }); };
 exports.details = details;
+var shellQuote = function (str) { return "'" + String(str).replace(/'/g, "'\\''") + "'"; };
 var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function () {
     var lib, pluginWorkDir, outputFilePath, shellCmd, spawnArgs, cli, res;
     return __generator(this, function (_a) {
@@ -70,7 +71,7 @@ var plugin = function (args) { return __awaiter(void 0, void 0, void 0, function
                 pluginWorkDir = "".concat(args.workDir, "/hdr10plus_tool");
                 args.deps.fsextra.ensureDirSync(pluginWorkDir);
                 outputFilePath = "".concat(pluginWorkDir, "/").concat((0, fileUtils_1.getFileName)(args.originalLibraryFile._id), "_hdr10plus_metadata.json");
-                shellCmd = "ffmpeg -i \"".concat(args.inputFileObj.file, "\" -y -loglevel error -stats -map 0:v:0 -c:v copy -bsf:v hevc_mp4toannexb -f hevc - | /usr/local/bin/hdr10plus_tool extract -o \"").concat(outputFilePath, "\" -");
+                shellCmd = "ffmpeg -i ".concat(shellQuote(args.inputFileObj.file), " -y -loglevel error -stats -map 0:v:0 -c:v copy -bsf:v hevc_mp4toannexb -f hevc - | /usr/local/bin/hdr10plus_tool extract -o ").concat(shellQuote(outputFilePath), " -");
                 spawnArgs = ['-c', shellCmd];
                 cli = new cliUtils_1.CLI({
                     cli: '/bin/sh',
