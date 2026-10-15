@@ -85,7 +85,7 @@ Below is a quick summary of each plugin used in the flow. Many are adapted from 
      - **Inject DoVi RPU 7** converts the stream in place (`convert --discard`) if it is unchanged since extraction, or injects the extracted RPU if the HEVC was re-encoded in between.  
      - **Package DoVi 7 mp4** uses MP4Box with `:dvp=8.1`.  
      - The `(Dual > Single-Layer)` variants behave the same and are kept so existing flows keep working.  
-   - If `dovi_tool extract-rpu` fails, the Extract plugins check the raw HEVC for a second, misplaced RPU in front of each frame (seen in some releases; dovi_tool then logs `Unexpected RPU NALU found for frame N. Discarding.` for every frame and ends with `Missing frame/slices for metadata!`). The misplaced copies are removed, extraction is retried and the flow continues with the cleaned stream.
+   - If `dovi_tool extract-rpu` fails, the Extract plugins check the raw HEVC for a second RPU per frame, either in front of the frame's slices or right after its RPU (seen in some releases; dovi_tool then logs `Unexpected RPU NALU found for frame N. Discarding.` for every frame and ends with `Missing frame/slices for metadata!`). Only the first RPU after each frame's slices is kept, extraction is retried and the flow continues with the cleaned stream.
 
 7. **Processing HDR10+**  
    - **Extract HDR10+ Metadata** → .json using `hdr10plus_tool`.  
