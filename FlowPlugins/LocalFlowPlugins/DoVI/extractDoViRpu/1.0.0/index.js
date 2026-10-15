@@ -33,10 +33,10 @@ var details = function () {
 };
 exports.details = details;
 
-// Copies an Annex B HEVC stream, dropping Dolby Vision RPU NAL units (type 62) that come before the first
-// slice of their access unit. An RPU belongs after the slices of its frame; some releases carry an extra copy
-// in front, which makes dovi_tool discard one RPU per frame and panic on the last one
-// ("Missing frame/slices for metadata!").
+// Copies an Annex B HEVC stream, keeping one Dolby Vision RPU NAL unit (type 62) per access unit: the first
+// one after the frame's slices. RPUs before the first slice and further RPUs after the kept one are dropped.
+// Some releases carry an extra copy per frame (in front of the slices or right after the frame's RPU), which
+// makes dovi_tool discard one RPU per frame and panic on the last one ("Missing frame/slices for metadata!").
 var removeMisplacedRpus = async function (inputPath, outputPath) {
   var fs = require('fs');
   var pipeline = require('stream').promises.pipeline;
@@ -48,25 +48,41 @@ var removeMisplacedRpus = async function (inputPath, outputPath) {
   var stats = { dropped: 0, identical: 0, different: 0 };
   var seenVcl = false;
   var misplaced = null;
+  var kept = null;
+  var compare = function (a, b) {
+    if (a.equals(b)) stats.identical += 1;
+    else stats.different += 1;
+  };
 
   var nalStart = function (buf, pos) { return (pos > 0 && buf[pos - 1] === 0) ? pos - 1 : pos; };
-  // Adds buf[from, to) to keep unless it is a misplaced RPU; the NAL's start code is at codePos
+  // Adds buf[from, to) to keep unless it is a misplaced or extra RPU; the NAL's start code is at codePos
   var handleNal = function (buf, codePos, from, to, keep) {
     var type = (buf[codePos + 3] >> 1) & 0x3f;
     var firstSlice = type < 32 && codePos + 5 < to && (buf[codePos + 5] & 0x80) !== 0;
     if ((startsAccessUnit(type) || firstSlice) && seenVcl) {
       seenVcl = false;
       misplaced = null;
+      kept = null;
     }
-    if (type === 62 && !seenVcl) {
-      stats.dropped += 1;
-      misplaced = Buffer.from(buf.subarray(codePos + 3, to));
-      return;
-    }
-    if (type === 62 && misplaced) {
-      if (misplaced.equals(buf.subarray(codePos + 3, to))) stats.identical += 1;
-      else stats.different += 1;
-      misplaced = null;
+    if (type === 62) {
+      var rpu = buf.subarray(codePos + 3, to);
+      if (!seenVcl) {
+        // In front of the frame's slices
+        stats.dropped += 1;
+        misplaced = Buffer.from(rpu);
+        return;
+      }
+      if (kept) {
+        // A second RPU after the frame's slices
+        stats.dropped += 1;
+        compare(kept, rpu);
+        return;
+      }
+      kept = Buffer.from(rpu);
+      if (misplaced) {
+        compare(misplaced, rpu);
+        misplaced = null;
+      }
     }
     if (type < 32) seenVcl = true;
     keep.push(buf.subarray(from, to));
@@ -136,10 +152,10 @@ var plugin = async function (args) {
   var res = await extractRpu(args, inputPath, outputFilePath);
 
   if (res.cliExitCode !== 0 && (0, fileUtils_1.getContainer)(inputPath) === 'hevc') {
-    args.jobLog('Extracting DoVi RPU failed, checking the stream for misplaced duplicate RPUs');
+    args.jobLog('Extracting DoVi RPU failed, checking the stream for duplicate RPUs');
     var cleanedPath = (0, fileUtils_1.getPluginWorkDir)(args) + "/" + (0, fileUtils_1.getFileName)(inputPath) + ".hevc";
     var stats = await removeMisplacedRpus(inputPath, cleanedPath);
-    args.jobLog("Misplaced RPUs removed: " + stats.dropped + " (identical to the frame's RPU: " + stats.identical
+    args.jobLog("Duplicate RPUs removed: " + stats.dropped + " (identical to the frame's RPU: " + stats.identical
       + ", different: " + stats.different + ")");
     if (stats.dropped > 0) {
       res = await extractRpu(args, cleanedPath, outputFilePath);
