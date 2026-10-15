@@ -1,9 +1,8 @@
-FROM ghcr.io/haveagitgat/tdarr_node:latest AS build
-#FROM ghcr.io/haveagitgat/tdarr_node:2.40.01 AS build
+FROM ubuntu:24.04 AS build
 
-ARG DOVI_TOOL_TAG="2.3.0"
-ARG MP4BOX_TAG="v2.4.0"
-ARG HDR10PLUS_TOOL_TAG="1.7.1"
+ARG DOVI_TOOL_TAG="2.3.4"
+ARG MP4BOX_TAG="v26.07.0"
+ARG HDR10PLUS_TOOL_TAG="1.7.2"
 
 # Update and install dependencies
 RUN apt-get update && \
@@ -34,7 +33,7 @@ RUN wget -O - "https://github.com/quietvoid/dovi_tool/releases/download/${DOVI_T
 RUN wget -O - "https://github.com/quietvoid/hdr10plus_tool/releases/download/${HDR10PLUS_TOOL_TAG}/hdr10plus_tool-${HDR10PLUS_TOOL_TAG}-x86_64-unknown-linux-musl.tar.gz" | \
     tar -zx -C /usr/local/bin/
 
-FROM haveagitgat/tdarr_node:latest
+FROM ghcr.io/haveagitgat/tdarr_node:3.00.00
 
 # Copy tools from the build stage
 COPY --from=build /usr/local/bin/dovi_tool /usr/local/bin/
