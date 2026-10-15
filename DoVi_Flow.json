@@ -176,7 +176,7 @@
       "id": "UpP4mFtqG",
       "position": {
         "x": 1384.1208095860593,
-        "y": 511.40083144142795
+        "y": 545.400831441428
       },
       "fpEnabled": true
     },
@@ -1068,6 +1068,18 @@
       "inputsDB": {
         "extensions": "mp4"
       }
+    },
+    {
+      "name": "Restore DoVi MP4 Config",
+      "sourceRepo": "Local",
+      "pluginName": "restoreDoViMp4Config",
+      "version": "1.0.0",
+      "fpEnabled": true,
+      "id": "dvRestore1",
+      "position": {
+        "x": 1383.8,
+        "y": 477.3
+      }
     }
   ],
   "flowEdges": [
@@ -1319,7 +1331,7 @@
     {
       "source": "O05LOTxgZ",
       "sourceHandle": "1",
-      "target": "UpP4mFtqG",
+      "target": "dvRestore1",
       "targetHandle": null,
       "id": "-if76hPG-"
     },
@@ -1728,6 +1740,13 @@
       "target": "zCh2Z_epA",
       "targetHandle": null,
       "id": "HomnkSbkk"
+    },
+    {
+      "source": "dvRestore1",
+      "sourceHandle": "1",
+      "target": "UpP4mFtqG",
+      "targetHandle": null,
+      "id": "dvEdge100"
     }
   ]
 }

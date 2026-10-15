@@ -48,7 +48,8 @@ This README explains how the **Extract → Inject → Package** (or skip steps i
 7. **Package**  
    - Use MP4Box to add the DV container flags (`:dvp=8.1`, or `:dvp=5` for Profile 5). The frame rate is taken from the original file.  
 8. **Remux**  
-   - Final step merges the original audio streams back into an MP4 container. Subtitles are kept as sidecar files.
+   - Final step merges the original audio streams back into an MP4 container. Subtitles are kept as sidecar files.  
+   - **Restore DoVi MP4 Config** then re-adds the Dolby Vision configuration record, which ffmpeg 7.1 drops during the remux.
 
 ---
 
@@ -93,6 +94,12 @@ Below is a quick summary of each plugin used in the flow. Many are adapted from 
 8. **Remux DoVi MP4**  
    - If input is MP4, merges the original file's audio streams with the new DV video. If MKV, re-mux to MP4.  
    - TrueHD and DTS audio is converted to E-AC3 (640k, max 5.1) by default, or removed if set to `remove`. The flow fails rather than produce a file without audio.
+
+9. **Restore DoVi MP4 Config**  
+   - Place it right after the Execute step of **Remux DoVi MP4**.  
+   - ffmpeg 7.1 (used by Tdarr with `ffmpegVersion=7`) drops the Dolby Vision configuration record (`dvcC`) when remuxing, even with `-strict unofficial`. The RPU data stays in the stream, but players no longer detect Dolby Vision.  
+   - Re-imports the file with MP4Box and sets the record again (`dvp=5` for Profile 5, `dvp=8.1` otherwise). Audio tracks, languages and track titles are kept; file-level tags such as the title are not.  
+   - Does nothing if the file still has the record.
 
 ---
 
