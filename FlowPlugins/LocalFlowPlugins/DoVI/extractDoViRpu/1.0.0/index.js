@@ -1,38 +1,4 @@
 "use strict";
-var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, generator) {
-  function adopt(value) { return value instanceof P ? value : new P(function (resolve) { resolve(value); }); }
-  return new (P || (P = Promise))(function (resolve, reject) {
-    function fulfilled(value) { try { step(generator.next(value)); } catch (e) { reject(e); } }
-    function rejected(value) { try { step(generator["throw"](value)); } catch (e) { reject(e); } }
-    function step(result) { result.done ? resolve(result.value) : adopt(result.value).then(fulfilled, rejected); }
-    step((generator = generator.apply(thisArg, _arguments || [])).next());
-  });
-};
-var __generator = (this && this.__generator) || function (thisArg, body) {
-  var _ = { label: 0, sent: function() { if (t[0] & 1) throw t[1]; return t[1]; }, trys: [], ops: [] }, f, y, t, g;
-  return g = { next: verb(0), "throw": verb(1), "return": verb(2) }, typeof Symbol === "function" && (g[Symbol.iterator] = function () { return this; }), g;
-  function verb(n) { return function (v) { return step([n, v]); }; }
-  function step(op) {
-    if (f) throw new TypeError("Generator is already executing.");
-    while (_) try {
-      if (f = 1, y && (t = op[0] & 2 ? y["return"] : op[0] ? y["throw"] : y.next) && !(t = t.call(y, op[1])).done) return t;
-      if (y = 0, t) op = [op[0] & 2, t.value];
-      switch (op[0]) {
-        case 0: case 1: t = op; break;
-        case 4: _.label++; return { value: op[1], done: false };
-        case 5: _.label++; y = op[1]; op = [0]; continue;
-        case 7: op = _.ops.pop(); _.trys.pop(); continue;
-        default:
-          if (!(t = _.trys, t = t.length > 0 && t[t.length - 1]) && (op[0] === 6 || op[0] === 2)) { _ = 0; continue; }
-          if (t && _.label < t[2]) { _.label = t[2]; _.ops.push(op); break; }
-          if (t[2]) _.ops.pop();
-          _.trys.pop(); continue;
-      }
-      op = body.call(thisArg, _);
-    } catch (e) { op = [6, e]; y = 0; } finally { f = t = 0; }
-    if (op[0] & 5) throw op[1]; return { value: op[0] ? op[1] : void 0, done: true };
-  }
-};
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.plugin = exports.details = void 0;
 
@@ -41,7 +7,7 @@ var fileUtils_1 = require("../../../../FlowHelpers/1.0.0/fileUtils");
 
 /*
   We remove the forced "-m 2" for Profile 7 extraction,
-  ensuring HDR10 fallback is retained. 
+  ensuring HDR10 fallback is retained.
   For all DV profiles (4,5,7,8), we now just do "extract-rpu" untouched.
 */
 
@@ -67,72 +33,136 @@ var details = function () {
 };
 exports.details = details;
 
-var plugin = function (args) {
-  return __awaiter(void 0, void 0, void 0, function () {
-    var lib, pluginWorkDir, outputFilePath, dvProfile, doviCliArgs, spawnArgs, cli, res;
-    return __generator(this, function (_a) {
-      switch (_a.label) {
-        case 0:
-          lib = require('../../../../../methods/lib')();
-          args.inputs = lib.loadDefaultValues(args.inputs, details);
+// Copies an Annex B HEVC stream, dropping Dolby Vision RPU NAL units (type 62) that come before the first
+// slice of their access unit. An RPU belongs after the slices of its frame; some releases carry an extra copy
+// in front, which makes dovi_tool discard one RPU per frame and panic on the last one
+// ("Missing frame/slices for metadata!").
+var removeMisplacedRpus = async function (inputPath, outputPath) {
+  var fs = require('fs');
+  var pipeline = require('stream').promises.pipeline;
+  var START_CODE = Buffer.from([0, 0, 1]);
+  // NAL types that start a new access unit after a picture (AUD, VPS, SPS, PPS, prefix SEI, reserved ranges)
+  var startsAccessUnit = function (type) {
+    return (type >= 32 && type <= 35) || type === 39 || (type >= 41 && type <= 44) || (type >= 48 && type <= 55);
+  };
+  var stats = { dropped: 0, identical: 0, different: 0 };
+  var seenVcl = false;
+  var misplaced = null;
 
-          pluginWorkDir = args.workDir + "/dovi_tool";
-          args.deps.fsextra.ensureDirSync(pluginWorkDir);
+  var nalStart = function (buf, pos) { return (pos > 0 && buf[pos - 1] === 0) ? pos - 1 : pos; };
+  // Adds buf[from, to) to keep unless it is a misplaced RPU; the NAL's start code is at codePos
+  var handleNal = function (buf, codePos, from, to, keep) {
+    var type = (buf[codePos + 3] >> 1) & 0x3f;
+    var firstSlice = type < 32 && codePos + 5 < to && (buf[codePos + 5] & 0x80) !== 0;
+    if ((startsAccessUnit(type) || firstSlice) && seenVcl) {
+      seenVcl = false;
+      misplaced = null;
+    }
+    if (type === 62 && !seenVcl) {
+      stats.dropped += 1;
+      misplaced = Buffer.from(buf.subarray(codePos + 3, to));
+      return;
+    }
+    if (type === 62 && misplaced) {
+      if (misplaced.equals(buf.subarray(codePos + 3, to))) stats.identical += 1;
+      else stats.different += 1;
+      misplaced = null;
+    }
+    if (type < 32) seenVcl = true;
+    keep.push(buf.subarray(from, to));
+  };
 
-          outputFilePath = pluginWorkDir + "/" + (0, fileUtils_1.getFileName)(args.originalLibraryFile._id) + ".rpu.bin";
-
-          // Attempt to read DV profile from side_data_list or scanning logic
-          dvProfile = 0;
-          try {
-            var sideData = args.inputFileObj.fileData.side_data_list || [];
-            if (Array.isArray(sideData) && sideData.length) {
-              dvProfile = sideData[0].dv_profile || 0;
-            }
-          } catch (err) {
-            // fallback - dvProfile=0
-          }
-
-          // Regardless of profile, we now do a raw "extract-rpu"
-          // to ensure no fallback data is discarded
-          doviCliArgs = [
-            'extract-rpu',
-            args.inputFileObj.file,
-            '-o',
-            outputFilePath
-          ];
-
-          // Convert args to a clean array
-          spawnArgs = doviCliArgs
-            .map(function (row) { return row.trim(); })
-            .filter(function (row) { return row !== ''; });
-
-          cli = new cliUtils_1.CLI({
-            cli: '/usr/local/bin/dovi_tool',
-            spawnArgs: spawnArgs,
-            spawnOpts: {},
-            jobLog: args.jobLog,
-            outputFilePath: outputFilePath,
-            inputFileObj: args.inputFileObj,
-            logFullCliOutput: args.logFullCliOutput,
-            updateWorker: args.updateWorker,
-          });
-
-          return [4 /*yield*/, cli.runCli()];
-        case 1:
-          res = _a.sent();
-          if (res.cliExitCode !== 0) {
-            args.jobLog('Extracting DoVi RPU failed');
-            throw new Error('dovi_tool failed');
-          }
-
-          args.logOutcome('tSuc');
-          return [2 /*return*/, {
-            outputFileObj: args.inputFileObj,
-            outputNumber: 1,
-            variables: args.variables,
-          }];
+  var filterNals = async function* (source) {
+    var carry = Buffer.alloc(0);
+    for await (var chunk of source) {
+      var buf = carry.length ? Buffer.concat([carry, chunk]) : chunk;
+      var keep = [];
+      var code = buf.indexOf(START_CODE);
+      if (code === -1) { carry = buf; continue; }
+      if (carry.length === 0 && nalStart(buf, code) > 0) keep.push(buf.subarray(0, nalStart(buf, code)));
+      var next = buf.indexOf(START_CODE, code + 3);
+      while (next !== -1) {
+        handleNal(buf, code, nalStart(buf, code), nalStart(buf, next), keep);
+        code = next;
+        next = buf.indexOf(START_CODE, code + 3);
       }
-    });
+      carry = buf.subarray(nalStart(buf, code));
+      if (keep.length) yield Buffer.concat(keep);
+    }
+    if (carry.length) {
+      var last = [];
+      var lastCode = carry.indexOf(START_CODE);
+      if (lastCode !== -1) handleNal(carry, lastCode, 0, carry.length, last);
+      else last.push(carry);
+      if (last.length) yield Buffer.concat(last);
+    }
+  };
+
+  await pipeline(
+    fs.createReadStream(inputPath, { highWaterMark: 16 * 1024 * 1024 }),
+    filterNals,
+    fs.createWriteStream(outputPath),
+  );
+  return stats;
+};
+
+var extractRpu = function (args, inputPath, outputFilePath) {
+  var cli = new cliUtils_1.CLI({
+    cli: '/usr/local/bin/dovi_tool',
+    spawnArgs: ['extract-rpu', inputPath, '-o', outputFilePath],
+    spawnOpts: {},
+    jobLog: args.jobLog,
+    outputFilePath: outputFilePath,
+    inputFileObj: args.inputFileObj,
+    logFullCliOutput: args.logFullCliOutput,
+    updateWorker: args.updateWorker,
   });
+  return cli.runCli();
+};
+
+var plugin = async function (args) {
+  var lib = require('../../../../../methods/lib')();
+  args.inputs = lib.loadDefaultValues(args.inputs, details);
+
+  var pluginWorkDir = args.workDir + "/dovi_tool";
+  args.deps.fsextra.ensureDirSync(pluginWorkDir);
+
+  var outputFilePath = pluginWorkDir + "/" + (0, fileUtils_1.getFileName)(args.originalLibraryFile._id) + ".rpu.bin";
+  var inputPath = args.inputFileObj._id;
+  var outputFileObj = args.inputFileObj;
+
+  // Regardless of profile, we now do a raw "extract-rpu"
+  // to ensure no fallback data is discarded
+  var res = await extractRpu(args, inputPath, outputFilePath);
+
+  if (res.cliExitCode !== 0 && (0, fileUtils_1.getContainer)(inputPath) === 'hevc') {
+    args.jobLog('Extracting DoVi RPU failed, checking the stream for misplaced duplicate RPUs');
+    var cleanedPath = (0, fileUtils_1.getPluginWorkDir)(args) + "/" + (0, fileUtils_1.getFileName)(inputPath) + ".hevc";
+    var stats = await removeMisplacedRpus(inputPath, cleanedPath);
+    args.jobLog("Misplaced RPUs removed: " + stats.dropped + " (identical to the frame's RPU: " + stats.identical
+      + ", different: " + stats.different + ")");
+    if (stats.dropped > 0) {
+      res = await extractRpu(args, cleanedPath, outputFilePath);
+      // Continue with the cleaned stream; the uncleaned copy is a Tdarr cache file and can go
+      if (res.cliExitCode === 0) {
+        if (inputPath.startsWith(args.workDir)) args.deps.fsextra.removeSync(inputPath);
+        outputFileObj = { _id: cleanedPath };
+      }
+    } else {
+      args.deps.fsextra.removeSync(cleanedPath);
+    }
+  }
+
+  if (res.cliExitCode !== 0) {
+    args.jobLog('Extracting DoVi RPU failed');
+    throw new Error('dovi_tool failed');
+  }
+
+  args.logOutcome('tSuc');
+  return {
+    outputFileObj: outputFileObj,
+    outputNumber: 1,
+    variables: args.variables,
+  };
 };
 exports.plugin = plugin;
