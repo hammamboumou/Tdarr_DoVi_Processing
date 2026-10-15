@@ -105,10 +105,13 @@ var plugin = function (args) {
               matchFall = rawStr.match(/maxfall.?=([\d]+)/) || [];
               matchMasterLuminance = rawStr.match(/masteringdisplay_luminance.?=([\d]+)/) || [];
               // MediaInfo JSON form, e.g. "maxcll":"1000 cd/m2" or "maxfall":"400 cd/m2"
-              var matchMediaInfoCll = rawStr.match(/"max(?:cll|fall)":"(\d+)/) || [];
+              // (checks every value, so a MaxCLL of 0 doesn't hide a valid MaxFALL)
+              var anyMediaInfoCll = (rawStr.match(/"max(?:cll|fall)":"\d+/g) || []).some(function (m) {
+                return parseInt(m.replace(/\D/g, '')) > 0;
+              });
 
               // If we find a numeric > 0 => good
-              if (matchMediaInfoCll.length > 1 && parseInt(matchMediaInfoCll[1]) > 0) {
+              if (anyMediaInfoCll) {
                 anyCll = true;
               }
               else if (matchCll.length > 1 && parseInt(matchCll[1]) > 0) {

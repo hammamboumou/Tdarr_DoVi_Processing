@@ -57,6 +57,7 @@ const isFlagged = (stream, disposition, titlePattern) => Number(stream.dispositi
 
 var plugin = function (args) {
     const path = require('path');
+    const fs = require('fs');
     const lib = require('../../../../../methods/lib')();
     args.inputs = lib.loadDefaultValues(args.inputs, details);
 
@@ -102,6 +103,13 @@ var plugin = function (args) {
                 return;
             }
             usedPaths.add(subtitlePath);
+
+            // Never overwrite a sidecar that is already in the library (e.g. a hand-picked .srt)
+            if (fs.existsSync(subtitlePath)) {
+                args.jobLog(`Skipping subtitle stream ${stream.index}: ${path.basename(subtitlePath)} already exists`);
+                stream.removed = true;
+                return;
+            }
 
             stream.outputArgs.push('-c:s', isText ? 'srt' : 'copy');
             stream.outputArgs.push(subtitlePath);

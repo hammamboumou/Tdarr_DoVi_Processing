@@ -147,6 +147,8 @@ var plugin = async function (args) {
       if (res.cliExitCode === 0) {
         if (inputPath.startsWith(args.workDir)) args.deps.fsextra.removeSync(inputPath);
         outputFileObj = { _id: cleanedPath };
+      } else {
+        args.deps.fsextra.removeSync(cleanedPath);
       }
     } else {
       args.deps.fsextra.removeSync(cleanedPath);
