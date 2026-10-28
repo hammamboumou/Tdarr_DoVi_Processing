@@ -101,6 +101,7 @@ Below is a quick summary of each plugin used in the flow. Many are adapted from 
    - ffmpeg 7.1 (used by Tdarr with `ffmpegVersion=7`) drops the Dolby Vision configuration record (`dvcC`) when remuxing, even with `-strict unofficial`. The RPU data stays in the stream, but players no longer detect Dolby Vision.  
    - Re-imports the file with MP4Box and sets the record again (`dvp=5` for Profile 5, `dvp=8.1` otherwise). Audio tracks, languages and track titles are kept; file-level tags such as the title are not.  
    - Does nothing if the file still has the record.
+   - Any later flow that runs ffmpeg on the finished MP4 (for example a stream reorder or cleanup flow using the community **Reorder Streams** + **Execute** plugins) drops the record again. ffmpeg logs `Not writing 'dvcC'/'dvvC' box. Requires -strict unofficial.` In such flows, add a **Custom Arguments** plugin before **Execute** with output arguments `-strict unofficial`.
 
 ---
 
